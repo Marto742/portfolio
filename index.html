@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>To-Do App with Sorting & Filtering</title>
+<style>
+  /* Reset */
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #121212;
+    color: #eee;
+    margin: 0;
+    padding: 0 1rem;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  h1 {
+    margin: 1.5rem 0;
+  }
+
+  form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    width: 100%;
+    max-width: 600px;
+    justify-content: center;
+  }
+
+  input[type="text"], input[type="date"] {
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+    border-radius: 20px;
+    border: none;
+    flex-grow: 1;
+    min-width: 180px;
+    outline-offset: 2px;
+    outline-color: #5a9;
+  }
+
+  button {
+    background: #5a9;
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 0.6rem 1.5rem;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.3s ease;
+    flex-shrink: 0;
+  }
+  button:hover,
+  button:focus {
+    background: #387;
+    outline: none;
+  }
+
+  .filters {
+    margin: 1rem 0;
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  select {
+    padding: 0.3rem 0.7rem;
+    border-radius: 10px;
+    border: none;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+
+  ul {
+    list-style: none;
+    padding: 0;
+    max-width: 600px;
+    width: 100%;
+  }
+
+  li {
+    background: #222;
+    margin-bottom: 0.5rem;
+    padding: 0.8rem 1rem;
+    border-radius: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fadeInUp 0.3s forwards;
+  }
+
+  li.completed .task-text {
+    text-decoration: line-through;
+    opacity: 0.6;
+  }
+
+  .task-text {
+    flex-grow: 1;
+    word-break: break-word;
+  }
+
+  .task-date {
+    font-size: 0.8rem;
+    opacity: 0.7;
+    margin-left: 0.5rem;
+  }
+
+  .actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .actions button {
+    background: transparent;
+    color: #5a9;
+    border-radius: 10px;
+    font-size: 1.2rem;
+    padding: 0.2rem 0.5rem;
+    cursor: pointer;
+    transition: color 0.2s ease;
+  }
+
+  .actions button:hover,
+  .actions button:focus {
+    color: #387;
+    outline: none;
+  }
+
+  @keyframes fadeInUp {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Mobile responsiveness */
+  @media (max-width: 480px) {
+    form {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    input[type="text"], input[type="date"], button {
+      width: 100%;
+      flex-grow: unset;
+    }
+
+    .filters {
+      flex-direction: column;
+    }
+  }
+</style>
+</head>
+<body>
+  <h1>My To-Do List</h1>
+
+  <form id="todo-form" aria-label="Add new task">
+    <input
+      id="task-input"
+      type="text"
+      aria-label="Task description"
+      placeholder="Enter new task"
+      required
+      autocomplete="off"
+    />
+    <input
+      id="date-input"
+      type="date"
+      aria-label="Due date"
+      min=""
+      title="Set a due date"
+    />
+    <button type="submit" aria-label="Add task">Add</button>
+  </form>
+
+  <div class="filters" role="region" aria-label="Task filters and sorting">
+    <select id="filter-select" aria-label="Filter tasks">
+      <option value="all">All tasks</option>
+      <option value="completed">Completed</option>
+      <option value="pending">Pending</option>
+    </select>
+
+    <select id="sort-select" aria-label="Sort tasks">
+      <option value="added-desc">Newest first</option>
+      <option value="added-asc">Oldest first</option>
+      <option value="date-asc">Due date ascending</option>
+      <option value="date-desc">Due date descending</option>
+      <option value="alpha-asc">A → Z</option>
+      <option value="alpha-desc">Z → A</option>
+    </select>
+  </div>
+
+  <ul id="task-list" aria-live="polite"></ul>
+
+<script>
+  (() => {
+    // DOM elements
+    const todoForm = document.getElementById('todo-form');
+    const taskInput = document.getElementById('task-input');
+    const dateInput = document.getElementById('date-input');
+    const filterSelect = document.getElementById('filter-select');
+    const sortSelect = document.getElementById('sort-select');
+    const taskList = document.getElementById('task-list');
+
+    // Set min date to today for due date input
+    const today = new Date().toISOString().split('T')[0];
+    dateInput.setAttribute('min', today);
+
+    // Task data store (in-memory)
+    let tasks = [];
+
+    // Add new task
+    todoForm.addEventListener('submit', e => {
+      e.preventDefault();
+      const text = taskInput.value.trim();
+      if (!text) return;
+
+      const dueDate = dateInput.value || null;
+
+      const newTask = {
+        id: Date.now(),
+        text,
+        completed: false,
+        addedAt: Date.now(),
+        dueDate,
+      };
+
+      tasks.push(newTask);
+      taskInput.value = '';
+      dateInput.value = '';
+
+      renderTasks();
+      taskInput.focus();
+    });
+
+    // Render tasks based on filter and sort
+    function renderTasks() {
+      // Clear list first
+      taskList.innerHTML = '';
+
+      // Filter tasks
+      const filter = filterSelect.value;
+      let filteredTasks = tasks;
+      if (filter === 'completed') {
+        filteredTasks = tasks.filter(t => t.completed);
+      } else if (filter === 'pending') {
+        filteredTasks = tasks.filter(t => !t.completed);
+      }
+
+      // Sort tasks
+      const sort = sortSelect.value;
+      filteredTasks.sort((a, b) => {
+        switch (sort) {
+          case 'added-asc':
+            return a.addedAt - b.addedAt;
+          case 'added-desc':
+            return b.addedAt - a.addedAt;
+          case 'date-asc':
+            if (!a.dueDate) return 1;
+            if (!b.dueDate) return -1;
+            return new Date(a.dueDate) - new Date(b.dueDate);
+          case 'date-desc':
+            if (!a.dueDate) return 1;
+            if (!b.dueDate) return -1;
+            return new Date(b.dueDate) - new Date(a.dueDate);
+          case 'alpha-asc':
+            return a.text.localeCompare(b.text);
+          case 'alpha-desc':
+            return b.text.localeCompare(a.text);
+          default:
+            return 0;
+        }
+      });
+
+      // Build and append list items
+      filteredTasks.forEach(task => {
+        const li = document.createElement('li');
+        li.setAttribute('role', 'listitem');
+        if (task.completed) li.classList.add('completed');
+
+        // checkbox for completing task
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = task.completed;
+        checkbox.setAttribute('aria-label', 'Mark task complete');
+        checkbox.addEventListener('change', () => {
+          task.completed = checkbox.checked;
+          renderTasks();
+        });
+
+        // task text
+        const spanText = document.createElement('span');
+        spanText.className = 'task-text';
+        spanText.textContent = task.text;
+
+        // due date
+        const spanDate = document.createElement('span');
+        spanDate.className = 'task-date';
+        spanDate.textContent = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '';
+
+        // delete button
+        const delBtn = document.createElement('button');
+        delBtn.setAttribute('aria-label', 'Delete task');
+        delBtn.innerHTML = '🗑️';
+        delBtn.addEventListener('click', () => {
+          tasks = tasks.filter(t => t.id !== task.id);
+          renderTasks();
+        });
+
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'actions';
+        actionsDiv.appendChild(delBtn);
+
+        li.appendChild(checkbox);
+        li.appendChild(spanText);
+        li.appendChild(spanDate);
+        li.appendChild(actionsDiv);
+
+        taskList.appendChild(li);
+      });
+    }
+
+    // Listen for filter or sort changes
+    filterSelect.addEventListener('change', renderTasks);
+    sortSelect.addEventListener('change', renderTasks);
+
+    // Initial render
+    renderTasks();
+  })();
+</script>
+</body>
+</html>
